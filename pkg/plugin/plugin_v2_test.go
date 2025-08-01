@@ -31,10 +31,11 @@ import (
 	"sigs.k8s.io/aws-encryption-provider/pkg/kmsplugin"
 )
 
-func TestEncryptV2(t *testing.T) {
+func TestPluginV2(t *testing.T) {
 	tt := []struct {
 		input     string
 		ctx       map[string]string
+		isCMK     bool
 		output    string
 		err       error
 		errType   kmsplugin.KMSErrorType
@@ -44,6 +45,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    encryptedMessage,
 			err:       nil,
 			errType:   kmsplugin.KMSErrorTypeNil,
@@ -53,6 +55,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       errorMessage,
 			errType:   kmsplugin.KMSErrorTypeOther,
@@ -62,6 +65,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:  plainMessage,
 			ctx:    nil,
+			isCMK:  false,
 			output: "",
 			err: &smithy.GenericAPIError{
 				Code:    "RequestLimitExceeded",
@@ -73,8 +77,23 @@ func TestEncryptV2(t *testing.T) {
 			checkErr:  true,
 		},
 		{
+			input:  plainMessage,
+			ctx:    nil,
+			isCMK:  true,
+			output: "",
+			err: &smithy.GenericAPIError{
+				Code:    "RequestLimitExceeded",
+				Message: "test",
+				Fault:   0,
+			},
+			errType:   kmsplugin.KMSErrorTypeUserInduced,
+			healthErr: true,
+			checkErr:  false,
+		},
+		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.KMSInternalException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeOther,
@@ -84,6 +103,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.LimitExceededException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeThrottled,
@@ -91,8 +111,19 @@ func TestEncryptV2(t *testing.T) {
 			checkErr:  true,
 		},
 		{
+			input:     plainMessage,
+			ctx:       nil,
+			isCMK:     true,
+			output:    "",
+			err:       &kmstypes.LimitExceededException{Message: aws.String("test")},
+			errType:   kmsplugin.KMSErrorTypeUserInduced,
+			healthErr: true,
+			checkErr:  false,
+		},
+		{
 			input:  plainMessage,
 			ctx:    nil,
+			isCMK:  false,
 			output: "",
 			err: &smithy.GenericAPIError{
 				Code:    "AccessDeniedException",
@@ -106,6 +137,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:  plainMessage,
 			ctx:    nil,
+			isCMK:  false,
 			output: "",
 			err: &smithy.GenericAPIError{
 				Code:    "AccessDeniedException",
@@ -119,6 +151,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.DisabledException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -128,6 +161,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.KMSInvalidStateException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -137,6 +171,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.InvalidGrantIdException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -146,6 +181,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.InvalidGrantTokenException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -155,6 +191,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       make(map[string]string),
+			isCMK:     false,
 			output:    encryptedMessage,
 			err:       nil,
 			errType:   kmsplugin.KMSErrorTypeNil,
@@ -164,6 +201,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     encryptedMessage,
 			ctx:       map[string]string{"a": "b"},
+			isCMK:     false,
 			output:    "",
 			err:       errors.New("invalid context"),
 			errType:   kmsplugin.KMSErrorTypeOther,
@@ -173,6 +211,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.KMSInternalException{Message: aws.String("AWS KMS rejected the request because the external key store proxy did not respond in time. Retry the request. If you see this error repeatedly, report it to your external key store proxy administrator")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -182,6 +221,7 @@ func TestEncryptV2(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.InvalidCiphertextException{Message: aws.String("InvalidCipherException:")},
 			errType:   kmsplugin.KMSErrorTypeCorruption,
@@ -210,7 +250,7 @@ func TestEncryptV2(t *testing.T) {
 				t.Fatalf("#%d: expected %s, but got %s", idx, kmsplugin.StorageVersion+tc.output, string(eRes.Ciphertext))
 			}
 
-			et := kmsplugin.ParseError(tc.err)
+			et := kmsplugin.ParseError(tc.err, p.isCMK)
 			if !reflect.DeepEqual(tc.errType, et) {
 				t.Fatalf("#%d: expected error type %s, got %s", idx, tc.errType, et)
 			}
@@ -231,7 +271,7 @@ func TestEncryptV2(t *testing.T) {
 				t.Fatalf("#%d: expected %s, but got %s", idx, tc.input, string(dRes.Plaintext))
 			}
 
-			et := kmsplugin.ParseError(tc.err)
+			et := kmsplugin.ParseError(tc.err, p.isCMK)
 			if !reflect.DeepEqual(tc.errType, et) {
 				t.Fatalf("#%d: expected error type %s, got %s", idx, tc.errType, et)
 			}
@@ -243,7 +283,7 @@ func TestEncryptV2(t *testing.T) {
 				c.SetDecryptResp(tc.input, tc.err)
 				sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
 				go sharedHealthCheck.Start()
-				p := NewV2(key, c, nil, sharedHealthCheck)
+				p := NewV2(key, c, nil, sharedHealthCheck, tc.isCMK)
 				defer func() {
 					sharedHealthCheck.Stop()
 				}()
@@ -268,63 +308,6 @@ func TestEncryptV2(t *testing.T) {
 		}
 	}
 }
-func TestDecryptV2(t *testing.T) {
-	tt := []struct {
-		input  string
-		ctx    map[string]string
-		output string
-		err    error
-	}{
-		{
-			input:  encryptedMessageV2,
-			ctx:    nil,
-			output: plainMessage,
-			err:    nil,
-		},
-		{
-			input:  encryptedMessageV2,
-			ctx:    nil,
-			output: "",
-			err:    errorMessage,
-		},
-		{
-			input:  encryptedMessage,
-			ctx:    map[string]string{"a": "b"},
-			output: "",
-			err:    errors.New("invalid context"),
-		},
-	}
-
-	c := &cloud.KMSMock{}
-	ctx := context.Background()
-
-	for _, tc := range tt {
-		func() {
-			c.SetDecryptResp(tc.output, tc.err)
-			sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
-			go sharedHealthCheck.Start()
-			p := NewV2(key, c, tc.ctx, sharedHealthCheck)
-			defer func() {
-				sharedHealthCheck.Stop()
-			}()
-
-			dReq := &pb.DecryptRequest{Ciphertext: []byte(tc.input)}
-			dRes, err := p.Decrypt(ctx, dReq)
-
-			if tc.err != nil && err == nil {
-				t.Fatalf("Failed to return expected error %v", tc.err)
-			}
-
-			if tc.err == nil && err != nil {
-				t.Fatalf("Returned unexpected error: %v", err)
-			}
-
-			if tc.err == nil && string(dRes.Plaintext) != tc.output {
-				t.Fatalf("Expected %s, but got %s", tc.output, string(dRes.Plaintext))
-			}
-		}()
-	}
-}
 
 func TestHealthV2(t *testing.T) {
 	plain := "input-text1"
@@ -335,28 +318,38 @@ func TestHealthV2(t *testing.T) {
 		encryptErr       error
 		decryptErr       error
 		decryptHealthErr bool
+		isCMK            bool
 	}{
 		{
 			encryptErr:       nil,
 			decryptErr:       nil,
 			decryptHealthErr: false,
+			isCMK:            false,
 		},
 		{
 			encryptErr:       errors.New("encrypt fail"),
 			decryptErr:       errors.New("decrypt fail"),
 			decryptHealthErr: true,
+			isCMK:            false,
+		},
+		{
+			encryptErr:       &kmstypes.LimitExceededException{Message: aws.String("test")},
+			decryptErr:       &kmstypes.LimitExceededException{Message: aws.String("test")},
+			decryptHealthErr: true,
+			isCMK:            true,
 		},
 		{
 			encryptErr:       nil,
 			decryptErr:       &kmstypes.InvalidCiphertextException{Message: aws.String("InvalidCipherException:")},
 			decryptHealthErr: false,
+			isCMK:            false,
 		},
 	}
 	for idx, entry := range tt {
 		c := &cloud.KMSMock{}
 		sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
 		go sharedHealthCheck.Start()
-		p := NewV2(key, c, nil, sharedHealthCheck)
+		p := NewV2(key, c, nil, sharedHealthCheck, entry.isCMK)
 		defer func() {
 			sharedHealthCheck.Stop()
 		}()
@@ -406,7 +399,7 @@ func TestHealthManyRequestsV2(t *testing.T) {
 	c := &cloud.KMSMock{}
 	sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
 	go sharedHealthCheck.Start()
-	p := newPluginV2(key, c, nil, sharedHealthCheck)
+	p := newPluginV2(key, c, nil, sharedHealthCheck, false)
 	defer func() {
 		sharedHealthCheck.Stop()
 	}()

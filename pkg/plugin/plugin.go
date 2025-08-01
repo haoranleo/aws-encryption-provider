@@ -40,15 +40,17 @@ type V1Plugin struct {
 	keyID         string
 	encryptionCtx map[string]string
 	healthCheck   *SharedHealthCheck
+	isCMK         bool
 }
 
 // New returns a new *V1Plugin
-func New(key string, svc cloud.AWSKMSv2, encryptionCtx map[string]string, healthCheck *SharedHealthCheck) *V1Plugin {
+func New(key string, svc cloud.AWSKMSv2, encryptionCtx map[string]string, healthCheck *SharedHealthCheck, isCMK bool) *V1Plugin {
 	return newPlugin(
 		key,
 		svc,
 		encryptionCtx,
 		healthCheck,
+		isCMK,
 	)
 }
 
@@ -57,11 +59,13 @@ func newPlugin(
 	svc cloud.AWSKMSv2,
 	encryptionCtx map[string]string,
 	sharedHealthCheck *SharedHealthCheck,
+	isCMK bool,
 ) *V1Plugin {
 	p := &V1Plugin{
 		svc:         svc,
 		keyID:       key,
 		healthCheck: sharedHealthCheck,
+		isCMK:       isCMK,
 	}
 	if len(encryptionCtx) > 0 {
 		p.encryptionCtx = make(map[string]string)
@@ -110,7 +114,7 @@ func (p *V1Plugin) Health() error {
 // If the error is user-induced (e.g., revoke CMK), the function returns NO error.
 // If the error is due to KMS availability, the function returns the error.
 func (p *V1Plugin) Live() error {
-	if err := p.Health(); err != nil && kmsplugin.ParseError(err) != kmsplugin.KMSErrorTypeUserInduced {
+	if err := p.Health(); err != nil && kmsplugin.ParseError(err, p.isCMK) != kmsplugin.KMSErrorTypeUserInduced {
 		return err
 	}
 	return nil
@@ -150,7 +154,7 @@ func (p *V1Plugin) Encrypt(ctx context.Context, request *pb.EncryptRequest) (*pb
 		case p.healthCheck.healthCheckErrc <- err:
 		default:
 		}
-		errorType := kmsplugin.ParseError(err).String()
+		errorType := kmsplugin.ParseError(err, p.isCMK).String()
 		zap.L().Error("request to encrypt failed", zap.String("error-type", errorType), zap.Error(err))
 		failLabel := kmsplugin.GetStatusLabel(err, errorType)
 		kmsLatencyMetric.WithLabelValues(p.keyID, failLabel, kmsplugin.OperationEncrypt, GRPC_V1).Observe(kmsplugin.GetMillisecondsSince(startTime))
@@ -185,7 +189,7 @@ func (p *V1Plugin) Decrypt(ctx context.Context, request *pb.DecryptRequest) (*pb
 
 	result, err := p.svc.Decrypt(ctx, input)
 	if err != nil {
-		errorType := kmsplugin.ParseError(err).String()
+		errorType := kmsplugin.ParseError(err, p.isCMK).String()
 		if errorType != kmsplugin.KMSErrorTypeCorruption.String() {
 			select {
 			case p.healthCheck.healthCheckErrc <- err:

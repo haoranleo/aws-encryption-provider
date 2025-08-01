@@ -42,7 +42,7 @@ func (t KMSErrorType) String() string {
 // ParseError parses error codes from KMS
 // ref. https://docs.aws.amazon.com/kms/latest/developerguide/key-state.html
 // ref. https://docs.aws.amazon.com/sdk-for-go/api/service/kms/
-func ParseError(err error) (errorType KMSErrorType) {
+func ParseError(err error, isCMK bool) (errorType KMSErrorType) {
 	if err == nil {
 		return KMSErrorTypeNil
 	}
@@ -62,6 +62,9 @@ func ParseError(err error) (errorType KMSErrorType) {
 	zap.L().Debug("parsed error", zap.String("code", ae.ErrorCode()), zap.String("message", ae.ErrorMessage()))
 	var defaultCodes retry.IsErrorThrottles = retry.DefaultThrottles
 	if defaultCodes.IsErrorThrottle(uerr) == aws.TrueTernary {
+		if isCMK {
+			return KMSErrorTypeUserInduced
+		}
 		return KMSErrorTypeThrottled
 	}
 	switch ae.ErrorCode() {
@@ -79,6 +82,9 @@ func ParseError(err error) (errorType KMSErrorType) {
 
 	// ref. https://docs.aws.amazon.com/kms/latest/developerguide/requests-per-second.html
 	case (&kmstypes.LimitExceededException{}).ErrorCode():
+		if isCMK {
+			return KMSErrorTypeUserInduced
+		}
 		return KMSErrorTypeThrottled
 
 	case (&kmstypes.InvalidCiphertextException{}).ErrorCode():

@@ -43,6 +43,7 @@ func TestEncrypt(t *testing.T) {
 	tt := []struct {
 		input     string
 		ctx       map[string]string
+		isCMK     bool
 		output    string
 		err       error
 		errType   kmsplugin.KMSErrorType
@@ -52,6 +53,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    encryptedMessage,
 			err:       nil,
 			errType:   kmsplugin.KMSErrorTypeNil,
@@ -61,6 +63,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       errorMessage,
 			errType:   kmsplugin.KMSErrorTypeOther,
@@ -70,6 +73,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:  plainMessage,
 			ctx:    nil,
+			isCMK:  false,
 			output: "",
 			err: &smithy.GenericAPIError{
 				Code:    "RequestLimitExceeded",
@@ -81,8 +85,23 @@ func TestEncrypt(t *testing.T) {
 			checkErr:  true,
 		},
 		{
+			input:  plainMessage,
+			ctx:    nil,
+			isCMK:  true,
+			output: "",
+			err: &smithy.GenericAPIError{
+				Code:    "RequestLimitExceeded",
+				Message: "test",
+				Fault:   0,
+			},
+			errType:   kmsplugin.KMSErrorTypeUserInduced,
+			healthErr: true,
+			checkErr:  false,
+		},
+		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.KMSInternalException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeOther,
@@ -92,6 +111,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.LimitExceededException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeThrottled,
@@ -99,8 +119,19 @@ func TestEncrypt(t *testing.T) {
 			checkErr:  true,
 		},
 		{
+			input:     plainMessage,
+			ctx:       nil,
+			isCMK:     true,
+			output:    "",
+			err:       &kmstypes.LimitExceededException{Message: aws.String("test")},
+			errType:   kmsplugin.KMSErrorTypeUserInduced,
+			healthErr: true,
+			checkErr:  false,
+		},
+		{
 			input:  plainMessage,
 			ctx:    nil,
+			isCMK:  false,
 			output: "",
 			err: &smithy.GenericAPIError{
 				Code:    "AccessDeniedException",
@@ -114,6 +145,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:  plainMessage,
 			ctx:    nil,
+			isCMK:  false,
 			output: "",
 			err: &smithy.GenericAPIError{
 				Code:    "AccessDeniedException",
@@ -127,6 +159,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.DisabledException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -136,6 +169,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.KMSInvalidStateException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -145,6 +179,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.InvalidGrantIdException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -154,6 +189,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       nil,
+			isCMK:     false,
 			output:    "",
 			err:       &kmstypes.InvalidGrantTokenException{Message: aws.String("test")},
 			errType:   kmsplugin.KMSErrorTypeUserInduced,
@@ -163,6 +199,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     plainMessage,
 			ctx:       make(map[string]string),
+			isCMK:     false,
 			output:    encryptedMessage,
 			err:       nil,
 			errType:   kmsplugin.KMSErrorTypeNil,
@@ -172,6 +209,7 @@ func TestEncrypt(t *testing.T) {
 		{
 			input:     encryptedMessage,
 			ctx:       map[string]string{"a": "b"},
+			isCMK:     false,
 			output:    "",
 			err:       errors.New("invalid context"),
 			errType:   kmsplugin.KMSErrorTypeOther,
@@ -188,7 +226,7 @@ func TestEncrypt(t *testing.T) {
 			c.SetEncryptResp(tc.output, tc.err)
 			sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
 			go sharedHealthCheck.Start()
-			p := New(key, c, nil, sharedHealthCheck)
+			p := New(key, c, nil, sharedHealthCheck, tc.isCMK)
 			defer func() {
 				sharedHealthCheck.Stop()
 			}()
@@ -209,7 +247,7 @@ func TestEncrypt(t *testing.T) {
 				t.Fatalf("#%d: expected %s, but got %s", idx, kmsplugin.StorageVersion+tc.output, string(eRes.Cipher))
 			}
 
-			et := kmsplugin.ParseError(tc.err)
+			et := kmsplugin.ParseError(tc.err, p.isCMK)
 			if !reflect.DeepEqual(tc.errType, et) {
 				t.Fatalf("#%d: expected error type %s, got %s", idx, tc.errType, et)
 			}
@@ -267,7 +305,7 @@ func TestDecrypt(t *testing.T) {
 			c.SetDecryptResp(tc.output, tc.err)
 			sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
 			go sharedHealthCheck.Start()
-			p := New(key, c, tc.ctx, sharedHealthCheck)
+			p := New(key, c, tc.ctx, sharedHealthCheck, false)
 			defer func() {
 				sharedHealthCheck.Stop()
 			}()
@@ -297,21 +335,29 @@ func TestHealth(t *testing.T) {
 	tt := []struct {
 		encryptErr error
 		decryptErr error
+		isCMK      bool
 	}{
 		{
 			encryptErr: nil,
 			decryptErr: nil,
+			isCMK:      false,
 		},
 		{
 			encryptErr: errors.New("encrypt fail"),
 			decryptErr: errors.New("decrypt fail"),
+			isCMK:      false,
+		},
+		{
+			encryptErr: &kmstypes.LimitExceededException{Message: aws.String("test")},
+			decryptErr: &kmstypes.LimitExceededException{Message: aws.String("test")},
+			isCMK:      true,
 		},
 	}
 	for idx, entry := range tt {
 		c := &cloud.KMSMock{}
 		sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
 		go sharedHealthCheck.Start()
-		p := New(key, c, nil, sharedHealthCheck)
+		p := New(key, c, nil, sharedHealthCheck, entry.isCMK)
 		defer func() {
 			sharedHealthCheck.Stop()
 		}()
@@ -357,7 +403,7 @@ func TestHealthManyRequests(t *testing.T) {
 	c := &cloud.KMSMock{}
 	sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
 	go sharedHealthCheck.Start()
-	p := newPlugin(key, c, nil, sharedHealthCheck)
+	p := newPlugin(key, c, nil, sharedHealthCheck, false)
 	defer func() {
 		sharedHealthCheck.Stop()
 	}()

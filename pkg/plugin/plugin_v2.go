@@ -39,15 +39,17 @@ type V2Plugin struct {
 	keyID         string
 	encryptionCtx map[string]string
 	healthCheck   *SharedHealthCheck
+	isCMK         bool
 }
 
 // New returns a new *V2Plugin
-func NewV2(key string, svc cloud.AWSKMSv2, encryptionCtx map[string]string, healthCheck *SharedHealthCheck) *V2Plugin {
+func NewV2(key string, svc cloud.AWSKMSv2, encryptionCtx map[string]string, healthCheck *SharedHealthCheck, isCMK bool) *V2Plugin {
 	return newPluginV2(
 		key,
 		svc,
 		encryptionCtx,
 		healthCheck,
+		isCMK,
 	)
 }
 
@@ -56,11 +58,13 @@ func newPluginV2(
 	svc cloud.AWSKMSv2,
 	encryptionCtx map[string]string,
 	healthCheck *SharedHealthCheck,
+	isCMK bool,
 ) *V2Plugin {
 	p := &V2Plugin{
 		svc:         svc,
 		keyID:       key,
 		healthCheck: healthCheck,
+		isCMK:       isCMK,
 	}
 	if len(encryptionCtx) > 0 {
 		p.encryptionCtx = make(map[string]string)
@@ -111,7 +115,7 @@ func (p *V2Plugin) Health() error {
 }
 
 func (p *V2Plugin) Live() error {
-	if err := p.Health(); err != nil && kmsplugin.ParseError(err) != kmsplugin.KMSErrorTypeUserInduced {
+	if err := p.Health(); err != nil && kmsplugin.ParseError(err, p.isCMK) != kmsplugin.KMSErrorTypeUserInduced {
 		return err
 	}
 	return nil
@@ -150,7 +154,7 @@ func (p *V2Plugin) Encrypt(ctx context.Context, request *pb.EncryptRequest) (*pb
 		case p.healthCheck.healthCheckErrc <- err:
 		default:
 		}
-		errorType := kmsplugin.ParseError(err).String()
+		errorType := kmsplugin.ParseError(err, p.isCMK).String()
 		zap.L().Error("request to encrypt failed", zap.String("error-type", errorType), zap.Error(err))
 		failLabel := kmsplugin.GetStatusLabel(err, errorType)
 		kmsLatencyMetric.WithLabelValues(p.keyID, failLabel, kmsplugin.OperationEncrypt, GRPC_V2).Observe(kmsplugin.GetMillisecondsSince(startTime))
@@ -190,7 +194,7 @@ func (p *V2Plugin) Decrypt(ctx context.Context, request *pb.DecryptRequest) (*pb
 
 	result, err := p.svc.Decrypt(ctx, input)
 	if err != nil {
-		errorType := kmsplugin.ParseError(err).String()
+		errorType := kmsplugin.ParseError(err, p.isCMK).String()
 		if errorType != kmsplugin.KMSErrorTypeCorruption.String() {
 			select {
 			case p.healthCheck.healthCheckErrc <- err:

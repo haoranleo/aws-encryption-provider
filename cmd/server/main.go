@@ -116,10 +116,11 @@ func main() {
 		s := server.New()
 		servers = append(servers, s)
 		encryptionCtx := getOrDefault(encryptionCtxs, i, map[string]string{})
+		isCMK := isCMK((*addrs)[i])
 
-		p := plugin.New(key, c, encryptionCtx, sharedHealthCheck)
+		p := plugin.New(key, c, encryptionCtx, sharedHealthCheck, isCMK)
 		p.Register(s.Server)
-		p2 := plugin.NewV2(key, c, encryptionCtx, sharedHealthCheck)
+		p2 := plugin.NewV2(key, c, encryptionCtx, sharedHealthCheck, isCMK)
 		p2.Register(s.Server)
 		if *healthKms == "v1" {
 			p1s = append(p1s, p)
@@ -195,4 +196,8 @@ func stringToStringConv(val string) (interface{}, error) {
 		out[kv[0]] = kv[1]
 	}
 	return out, nil
+}
+
+func isCMK(addr string) bool {
+	return !strings.Contains(addr, "aok")
 }

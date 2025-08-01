@@ -27,21 +27,31 @@ func TestLivez(t *testing.T) {
 	tt := []struct {
 		path          string
 		kmsEncryptErr error
+		isCMK         bool
 		shouldSucceed bool
 	}{
 		{
 			path:          "/test-livez-default",
 			kmsEncryptErr: nil,
+			isCMK:         false,
 			shouldSucceed: true,
 		},
 		{
 			path:          "/test-livez-fail",
 			kmsEncryptErr: errors.New("fail encrypt"),
+			isCMK:         false,
 			shouldSucceed: false,
 		},
 		{
 			path:          "/test-livez-fail-with-internal-error",
 			kmsEncryptErr: &kmstypes.KMSInternalException{Message: aws.String("test")},
+			isCMK:         false,
+			shouldSucceed: false,
+		},
+		{
+			path:          "/test-livez-fail-with-non-cmk-throttled",
+			kmsEncryptErr: &kmstypes.LimitExceededException{Message: aws.String("test")},
+			isCMK:         false,
 			shouldSucceed: false,
 		},
 
@@ -49,11 +59,19 @@ func TestLivez(t *testing.T) {
 		{
 			path:          "/test-livez-fail-with-user-induced-invalid-key-state",
 			kmsEncryptErr: &kmstypes.KMSInvalidStateException{Message: aws.String("test")},
+			isCMK:         false,
 			shouldSucceed: true,
 		},
 		{
 			path:          "/test-livez-fail-with-user-induced-invalid-grant",
 			kmsEncryptErr: &kmstypes.InvalidGrantTokenException{Message: aws.String("test")},
+			isCMK:         false,
+			shouldSucceed: true,
+		},
+		{
+			path:          "/test-livez-fail-with-cmk-throttled",
+			kmsEncryptErr: &kmstypes.LimitExceededException{Message: aws.String("test")},
+			isCMK:         true,
 			shouldSucceed: true,
 		},
 	}
@@ -67,7 +85,7 @@ func TestLivez(t *testing.T) {
 			sharedHealthCheck := plugin.NewSharedHealthCheck(plugin.DefaultHealthCheckPeriod, plugin.DefaultErrcBufSize)
 			go sharedHealthCheck.Start()
 			defer sharedHealthCheck.Stop()
-			p := plugin.New("test-key", c, nil, sharedHealthCheck)
+			p := plugin.New("test-key", c, nil, sharedHealthCheck, entry.isCMK)
 
 			ready, errc := make(chan struct{}), make(chan error)
 			s := server.New()

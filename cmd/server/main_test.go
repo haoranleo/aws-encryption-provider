@@ -106,3 +106,28 @@ func TestStringToStringConv(t *testing.T) {
 		})
 	}
 }
+
+func TestIsCMK(t *testing.T) {
+	tests := []struct {
+		name     string
+		addr     string
+		expected bool
+	}{
+		{
+			name:     "CMK address",
+			addr:     "var/run/kmsplugin/socket.sock",
+			expected: true,
+		},
+		{
+			name:     "non-CMK address",
+			addr:     "var/run/kmsplugin/socket-aok.sock",
+			expected: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			actual := isCMK(test.addr)
+			assert.Equal(t, test.expected, actual)
+		})
+	}
+}

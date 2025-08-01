@@ -53,7 +53,7 @@ func TestMetrics(t *testing.T) {
 			sharedHealthCheck := NewSharedHealthCheck(DefaultHealthCheckPeriod, DefaultErrcBufSize)
 			go sharedHealthCheck.Start()
 			defer sharedHealthCheck.Stop()
-			p := New(entry.key, c, nil, sharedHealthCheck)
+			p := New(entry.key, c, nil, sharedHealthCheck, false)
 
 			ready, errc := make(chan struct{}), make(chan error)
 			s := server.New()
